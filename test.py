@@ -7,6 +7,7 @@ import numpy as np
 import re
 import spacy
 from sentence_transformers import SentenceTransformer
+from bertopic import BERTopic
 
 model = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
@@ -65,6 +66,60 @@ unique_publications = df["Publication"].unique()
 # Create a dictionary to store resampled data for each publication
 publication_resampled_data = {}
 for pub in df["Publication"].unique():
+    if pub == "USA Today":
+        continue
     pub_df = df[df["Publication"] == pub].set_index("Date")
     resampled_df = pub_df.resample("6M").agg({"Headline": join_headlines})
     publication_resampled_data[pub] = resampled_df["Headline"].apply(preprocess)
+
+# Document Similarities
+
+# Create a TF-IDF vectorizer
+vectorizer = TfidfVectorizer()
+
+
+# Topic Modeling
+topic_model = BERTopic(verbose=True)
+
+timestamps = [
+    "2009-09-30",
+    "2010-03-31",
+    "2010-09-30",
+    "2011-03-31",
+    "2011-09-30",
+    "2012-03-31",
+    "2012-09-30",
+    "2013-03-31",
+    "2013-09-30",
+    "2014-03-31",
+    "2014-09-30",
+    "2015-03-31",
+    "2015-09-30",
+    "2016-03-31",
+    "2016-09-30",
+    "2017-03-31",
+    "2017-09-30",
+    "2018-03-31",
+    "2018-09-30",
+    "2019-03-31",
+    "2019-09-30",
+    "2020-03-31",
+    "2020-09-30",
+    "2021-03-31",
+    "2021-09-30",
+    "2022-03-31",
+    "2022-09-30",
+    "2023-03-31",
+]
+
+data = {}
+for pub in publication_resampled_data:
+    print(pub)
+    topics, probs = topic_model.fit_transform(publication_resampled_data[pub].to_list())
+    topics_over_time = topic_model.topics_over_time(
+        publication_resampled_data[pub].to_list(), timestamps, nr_bins=20
+    )
+    data[pub] = topics_over_time
+
+
+# Sentiment Analysis
