@@ -5,104 +5,144 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 import numpy as np
 import re
+import spacy
+from sentence_transformers import SentenceTransformer
 
 
-def compute_cluster_summaries(kmeans, vectorizer, top_n):
-    """Compute the top_n highest-weighted terms from the centroid of each cluster.
+model = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
-    Arguments:
-        kmeans: The trained k-means classifier.
-        vectorizer: The fitted vectorizer; needed to obtain the actual terms
-                    belonging to the items in the cluster.
-        top_n: The number of terms to return for each cluster.
-
-    Returns:
-        A list of length k, where k is the number of clusters. Each item in the list
-        should be a list of length `top_n` with the highest-weighted terms from that
-        cluster.  Example:
-          [["first", "foo", ...], ["second", "bar", ...], ["third", "baz", ...]]
-    """
-    result = []
-    for k in range(kmeans.n_clusters):
-        top_n_idx = np.argsort(kmeans.cluster_centers_[k])[::-1][:top_n]
-        temp = []
-        for idx in top_n_idx:
-            temp.append(vectorizer.get_feature_names_out()[idx])
-        result.append(temp)
-    return result
+nlp = spacy.load("en_core_web_sm", disable=["parser", "ner", "textcat"])
 
 
-def fit_kmeans(data, n_clusters):
-    """Fit a k-means classifier to some data.
-
-    Arguments:
-        data: The vectorized data to train the classifier on.
-        n_clusters (int): The number of clusters.
-
-    Returns:
-        The trained k-means classifier.
-    """
-    return KMeans(n_clusters=n_clusters, n_init="auto").fit(data)
-
-
-def plot_cluster_size(kmeans):
-    """Produce & display a bar plot with the number of documents per cluster.
-
-    Arguments:
-        kmeans: The trained k-means classifier.
-    """
-    plt.bar(range(kmeans.n_clusters), pd.Series(kmeans.labels_).value_counts())
+def preprocess(text):
+    """Preprocess text by removing punctuation, stopwords, and lemmatizing, and converting to lowercase"""
+    doc = nlp(text.lower())  # Convert text to lowercase
+    result = [
+        token.lemma_
+        for token in doc
+        if not token.is_stop
+        and token.is_alpha
+        and not token.is_punct
+        and not token.like_num
+    ]
+    return " ".join(result)
 
 
-# Read the data
-df_bbc = pd.read_csv("bbc_news.csv")
-# df_cnn = pd.read_csv("cnn_news.csv")
-
-# Convert the date to datetime
-df_bbc["pubDate"] = pd.to_datetime(df_bbc["pubDate"])
-# df_cnn["Date published"] = pd.to_datetime(df_cnn["Date published"])
-
-df_bbc.set_index("pubDate", inplace=True)
-# df_cnn.set_index("Date published", inplace=True)
-
-count_bbc = df_bbc.resample("6M").count()
-# count_cnn = df_cnn.resample("6M").count()
+def join_headlines(series):
+    """Combine headlines in a series into a single string"""
+    # Limit the number of headlines to 100 -> can be changed
+    return " ".join(series.sample(n=min(100, len(series)), random_state=1))
 
 
-# 打印结果
-print("BBC每三个月的数据计数:")
-print(count_bbc)
-# print("\nCNN每三个月的数据计数:")
-# print(count_cnn)
+def get_bert_embedding(text):
+    """Convert text to a BERT embedding"""
+    return model.encode(text)
 
-# Clean the data
-df_bbc["description"] = df_bbc["description"].apply(
-    lambda x: re.sub(r"\W", " ", str(x))
+
+df = pd.read_csv("headlines.csv")
+df = df.dropna(subset=["Headline"])  # Remove rows with empty headlines
+# Remove all rows related to "USA Today"
+df = df[df["Publication"] != "USA Today"]
+
+
+# Convert the "Date" column to datetime objects
+df["Date"] = pd.to_datetime(df["Date"], format="%Y%m%d")
+
+publication_date_range = df.groupby("Publication")["Date"].agg(["min", "max"])
+
+# Finding the overlap in date range
+# Initialize the overlap range with the first publication's date range
+min_date, max_date = publication_date_range.iloc[0]
+
+# Iterate through the date ranges to find the overlap
+for _, row in publication_date_range.iterrows():
+    min_date = max(min_date, row["min"])
+    max_date = min(max_date, row["max"])
+
+df = df[df["Date"] >= min_date]
+df = df[df["Date"] <= max_date]
+
+# Find all unique publications
+unique_publications = df["Publication"].unique()
+
+# Create a dictionary to store resampled data for each publication
+publication_resampled_data = {}
+for pub in df["Publication"].unique():
+    print(pub)
+    pub_df = df[df["Publication"] == pub].set_index("Date")
+    resampled_df = pub_df.resample("1Y").agg({"Headline": join_headlines})
+    publication_resampled_data[pub] = resampled_df["Headline"].apply(preprocess)
+
+
+timestamps = [
+    "2009-12-31",
+    "2010-12-31",
+    "2011-12-31",
+    "2012-12-31",
+    "2013-12-31",
+    "2014-12-31",
+    "2015-12-31",
+    "2016-12-31",
+    "2017-12-31",
+    "2018-12-31",
+    "2019-12-31",
+    "2020-12-31",
+    "2021-12-31",
+    "2022-12-31",
+]
+# Document Similarities
+from sklearn.metrics.pairwise import cosine_similarity
+
+embeddings = {}
+for pub in unique_publications:
+    for timestamp in timestamps:
+        embeddings[(pub, timestamp)] = get_bert_embedding(
+            publication_resampled_data[pub][timestamp]
+        )
+similarity_matrix = {}
+for pub in unique_publications:
+    if pub != "BBC":
+        for timestamp in timestamps:
+            bbc_embedding = embeddings[("BBC", timestamp)]
+            pub_embedding = embeddings[(pub, timestamp)]
+            similarity = cosine_similarity([bbc_embedding], [pub_embedding])[0][0]
+            similarity_matrix[(pub, timestamp)] = similarity
+
+# Plotting the similarity scores
+
+import seaborn as sns
+
+data = [
+    {"Publication": pub, "Date": date, "Similarity": sim}
+    for (pub, date), sim in similarity_matrix.items()
+]
+similarity_df = pd.DataFrame(data)
+
+similarity_df["Date"] = pd.to_datetime(similarity_df["Date"]).dt.year
+
+pivot_table = similarity_df.pivot(
+    index="Publication", columns="Date", values="Similarity"
 )
-# df_cnn["Description"] = df_cnn["Description"].apply(
-#    lambda x: re.sub(r"\W", " ", str(x))
-# )
-df_bbc["description"] = df_bbc["description"].apply(lambda x: x.lower())
-# df_cnn["Description"] = df_cnn["Description"].apply(lambda x: x.lower())
+
+plt.figure(figsize=(12, 8))
+sns.heatmap(pivot_table, annot=True, cmap="coolwarm")
+plt.title("Document Similarity Heatmap with BBC")
+plt.show()
+
+# Topic Modeling
+"""from bertopic import BERTopic
+
+topic_model = BERTopic(verbose=True)
 
 
-"""# Vectorize the data
-vectorizer = TfidfVectorizer(stop_words="english")
-vectorized_bbc = vectorizer.fit_transform(df_bbc["description"])
-vectorized_cnn = vectorizer.fit_transform(df_cnn["Description"])
-
-vectorized_data = vectorizer.fit_transform(
-    pd.concat([df_bbc["description"], df_cnn["Description"]])
-)
+data = {}
+for pub in publication_resampled_data:
+    print(pub)
+    topics, probs = topic_model.fit_transform(publication_resampled_data[pub].to_list())
+    topics_over_time = topic_model.topics_over_time(
+        publication_resampled_data[pub].to_list(), timestamps, nr_bins=20
+    )
+    data[pub] = topics_over_time
 """
 
-"""from sklearn.decomposition import LatentDirichletAllocation
-
-lda = LatentDirichletAllocation(n_components=10, random_state=42)
-lda.fit(vectorized_bbc)
-
-feature_names = vectorizer.get_feature_names_out()
-for topic_idx, topic in enumerate(lda.components_):
-    message = "Topic #%d: " % topic_idx
-    message += " ".join([feature_names[i] for i in topic.argsort()[: -10 - 1 : -1]])
-    print(message)"""
+# Sentiment Analysis
