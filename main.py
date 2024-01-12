@@ -35,7 +35,7 @@ def preprocess(text):
 def join_headlines(series):
     """Combine headlines in a series into a single string"""
     # Limit the number of headlines to 100 -> can be changed
-    return " ".join(series.sample(n=min(100, len(series)), random_state=1))
+    return " ".join(series.sample(n=min(500, len(series)), random_state=1))
 
 
 def get_bert_embedding(text):
@@ -103,9 +103,9 @@ for pub in unique_publications:
         )
 similarity_matrix = {}
 for pub in unique_publications:
-    if pub != "FOX":
+    if pub != "BBC":
         for timestamp in timestamps:
-            bbc_embedding = embeddings[("FOX", timestamp)]
+            bbc_embedding = embeddings[("BBC", timestamp)]
             pub_embedding = embeddings[(pub, timestamp)]
             similarity = cosine_similarity([bbc_embedding], [pub_embedding])[0][0]
             similarity_matrix[(pub, timestamp)] = similarity
@@ -126,27 +126,58 @@ pivot_table = similarity_df.pivot(
 
 plt.figure(figsize=(12, 8))
 sns.heatmap(pivot_table, annot=True, cmap="coolwarm")
-plt.title("Document Similarity Heatmap with FOX")
-plt.show()"""
-
+plt.title("Document Similarity Heatmap with BBC")
+plt.show()
+"""
 # Topic Modeling
-"""from bertopic import BERTopic
+from bertopic import BERTopic
+from bertopic.vectorizers import ClassTfidfTransformer
+from bertopic.representation import KeyBERTInspired
 
-topic_model = BERTopic(verbose=True)
+representation_model = KeyBERTInspired()
+ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
+topic_model = BERTopic(
+    min_topic_size=10,
+    verbose=True,
+    ctfidf_model=ctfidf_model,
+    representation_model=representation_model,
+)
 
-data = {}
+data = []
+"""
+# all data
+for pub in df["Publication"].unique():
+    print(pub)
+    pub_df = df[df["Publication"] == pub]
+    documents = pub_df["Headline"].tolist()
+    topics, probs = topic_model.fit_transform(documents)
+    topics_over_time = topic_model.topics_over_time(
+        documents, pub_df["Date"].tolist(), nr_bins=20
+    )
+    print(topics_over_time)
+    fig = topic_model.visualize_topics_over_time(topics_over_time, top_n_topics=20)
+    # data[pub] = topics_over_time
+    # data[pub].to_csv(f"{pub}_topics_over_time.csv")
+    fig.write_html(f"figure/{pub}_topics_over_time.html")"""
+
+topics, _ = topic_model.fit_transform(df["Headline"].tolist())
+freq = topic_model.get_topic_info()
+print(freq.head(10))
+"""
+# resampled data with topics_over_time
 for pub in publication_resampled_data:
     print(pub)
     topics, probs = topic_model.fit_transform(publication_resampled_data[pub].to_list())
     topics_over_time = topic_model.topics_over_time(
         publication_resampled_data[pub].to_list(), timestamps, nr_bins=20
     )
-    print(topics_over_time)
+    # print(topics_over_time)
     data[pub] = topics_over_time
-"""
+    fig = topic_model.visualize_topics_over_time(topics_over_time)
+    fig.write_html(f"{pub}_topics_over_time.html")"""
 
 # Sentiment Analysis
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+"""from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 analyzer = SentimentIntensityAnalyzer()
 
@@ -187,3 +218,4 @@ plt.figure(figsize=(12, 8))
 sns.heatmap(pivot_table, annot=True, cmap="coolwarm")
 plt.title("Sentiment Heatmap")
 plt.show()
+"""
