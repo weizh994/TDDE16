@@ -133,49 +133,62 @@ plt.show()
 from bertopic import BERTopic
 from bertopic.vectorizers import ClassTfidfTransformer
 from bertopic.representation import KeyBERTInspired
+from sklearn.feature_extraction.text import CountVectorizer
 
 representation_model = KeyBERTInspired()
-ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
+vectorizer_model = CountVectorizer(stop_words="english")
+ctfidf_model = ClassTfidfTransformer(bm25_weighting=True, reduce_frequent_words=True)
 topic_model = BERTopic(
+    language="english", calculate_probabilities=True,
     min_topic_size=10,
     verbose=True,
+    vectorizer_model=vectorizer_model,
     ctfidf_model=ctfidf_model,
     representation_model=representation_model,
 )
 
-data = []
-"""
+data = {}
+sampled_df = df.sample(frac=0.1, random_state=1)
+
 # all data
-for pub in df["Publication"].unique():
+
+for pub in sampled_df["Publication"].unique():
     print(pub)
-    pub_df = df[df["Publication"] == pub]
+    pub_df = sampled_df[sampled_df["Publication"] == pub]
     documents = pub_df["Headline"].tolist()
     topics, probs = topic_model.fit_transform(documents)
     topics_over_time = topic_model.topics_over_time(
         documents, pub_df["Date"].tolist(), nr_bins=20
     )
     print(topics_over_time)
+    freq = topic_model.get_topic_info()
+    print(freq.head(10))
+    fig = topic_model.visualize_topics()
+    fig.write_html("figure/{pub}_all_topics.html")
+    fig=topic_model.visualize_barchart(top_n_topics=5)
+    fig.write_html("figure/top5/{pub}.html")
     fig = topic_model.visualize_topics_over_time(topics_over_time, top_n_topics=20)
     # data[pub] = topics_over_time
     # data[pub].to_csv(f"{pub}_topics_over_time.csv")
-    fig.write_html(f"figure/{pub}_topics_over_time.html")"""
+    fig.write_html(f"figure/{pub}_topics_over_time.html")
 
-topics, _ = topic_model.fit_transform(df["Headline"].tolist())
-freq = topic_model.get_topic_info()
-print(freq.head(10))
-"""
+
+
 # resampled data with topics_over_time
-for pub in publication_resampled_data:
+'''for pub in publication_resampled_data:
     print(pub)
     topics, probs = topic_model.fit_transform(publication_resampled_data[pub].to_list())
+    fig = topic_model.visualize_topics()
+    fig.write_html(f"figure/{pub}_all_topics.html")
     topics_over_time = topic_model.topics_over_time(
         publication_resampled_data[pub].to_list(), timestamps, nr_bins=20
     )
     # print(topics_over_time)
     data[pub] = topics_over_time
-    fig = topic_model.visualize_topics_over_time(topics_over_time)
-    fig.write_html(f"{pub}_topics_over_time.html")"""
-
+    print(data[pub])
+    #fig = topic_model.visualize_topics_over_time(topics_over_time)
+    #fig.write_html(f"{pub}_topics_over_time.html")
+'''
 # Sentiment Analysis
 """from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
