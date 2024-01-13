@@ -164,9 +164,9 @@ for pub in sampled_df["Publication"].unique():
     freq = topic_model.get_topic_info()
     print(freq.head(10))
     fig = topic_model.visualize_topics()
-    fig.write_html("figure/{pub}_all_topics.html")
+    fig.write_html(f"figure/{pub}_all_topics.html")
     fig=topic_model.visualize_barchart(top_n_topics=5)
-    fig.write_html("figure/top5/{pub}.html")
+    fig.write_html(f"figure//{pub}_top5.html")
     fig = topic_model.visualize_topics_over_time(topics_over_time, top_n_topics=20)
     # data[pub] = topics_over_time
     # data[pub].to_csv(f"{pub}_topics_over_time.csv")
