@@ -139,7 +139,8 @@ representation_model = KeyBERTInspired()
 vectorizer_model = CountVectorizer(stop_words="english")
 ctfidf_model = ClassTfidfTransformer(bm25_weighting=True, reduce_frequent_words=True)
 topic_model = BERTopic(
-    language="english", calculate_probabilities=True,
+    language="english",
+    calculate_probabilities=True,
     min_topic_size=10,
     verbose=True,
     vectorizer_model=vectorizer_model,
@@ -165,7 +166,7 @@ for pub in sampled_df["Publication"].unique():
     print(freq.head(10))
     fig = topic_model.visualize_topics()
     fig.write_html(f"figure/{pub}_all_topics.html")
-    fig=topic_model.visualize_barchart(top_n_topics=5)
+    fig = topic_model.visualize_barchart(top_n_topics=5)
     fig.write_html(f"figure//{pub}_top5.html")
     fig = topic_model.visualize_topics_over_time(topics_over_time, top_n_topics=20)
     # data[pub] = topics_over_time
@@ -173,9 +174,8 @@ for pub in sampled_df["Publication"].unique():
     fig.write_html(f"figure/{pub}_topics_over_time.html")
 
 
-
 # resampled data with topics_over_time
-'''for pub in publication_resampled_data:
+"""for pub in publication_resampled_data:
     print(pub)
     topics, probs = topic_model.fit_transform(publication_resampled_data[pub].to_list())
     fig = topic_model.visualize_topics()
@@ -188,9 +188,9 @@ for pub in sampled_df["Publication"].unique():
     print(data[pub])
     #fig = topic_model.visualize_topics_over_time(topics_over_time)
     #fig.write_html(f"{pub}_topics_over_time.html")
-'''
+"""
 # Sentiment Analysis
-"""from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 analyzer = SentimentIntensityAnalyzer()
 
@@ -231,4 +231,3 @@ plt.figure(figsize=(12, 8))
 sns.heatmap(pivot_table, annot=True, cmap="coolwarm")
 plt.title("Sentiment Heatmap")
 plt.show()
-"""
